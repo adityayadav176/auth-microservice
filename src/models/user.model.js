@@ -74,6 +74,13 @@ const UserSchema = new Schema({
     forgetPasswordOtpExpiredAt: {
         type: Date
     },
+    deleteAccountOtp: {
+        type: String,
+        default: ""
+    },
+    deleteAccountOtpExpiredAt: {
+        type: Date
+    },
     lockUntil: {
         type: Date,
         default: null

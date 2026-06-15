@@ -200,23 +200,23 @@ const loginUser = asyncHandler(async (req, res) => {
 const logoutUser = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
 
-    if(!userId) {
+    if (!userId) {
         throw new ApiError(401, "Unauthorized Access Denied");
     }
 
-   const user = await User.findOneAndUpdate(
-    { _id: userId },
-    {
-        $unset: {
-            refreshToken: 1
+    const user = await User.findOneAndUpdate(
+        { _id: userId },
+        {
+            $unset: {
+                refreshToken: 1
+            }
+        },
+        {
+            returnDocument: "after"
         }
-    },
-    {
-        returnDocument: "after"
-    }
-);
+    );
 
-    if(!user) {
+    if (!user) {
         throw new ApiError(404, "User Not Found");
     }
 
@@ -230,50 +230,50 @@ const logoutUser = asyncHandler(async (req, res) => {
         .status(200)
         .clearCookie("accessToken", cookieOption)
         .clearCookie("refreshToken", cookieOption)
-    .json(
-        new ApiResponse(200, {}, "User Logged Out Successfully")
-    )
+        .json(
+            new ApiResponse(200, {}, "User Logged Out Successfully")
+        )
 })
 
 const verifyAccount = asyncHandler(async (req, res) => {
-    const {otp} = req.body;
+    const { otp } = req.body;
 
-    if(!otp) {
+    if (!otp) {
         throw new ApiError(400, "Otp required For Verificaition");
     }
 
     const userId = req.user?._id;
-    
-    if(!userId) {
+
+    if (!userId) {
         throw new ApiError(401, "Unauthorized Access Denied");
     }
 
     const user = await User.findById(userId);
 
-    if(!user) {
+    if (!user) {
         throw new ApiError(404, "User not Found");
-    } 
+    }
 
-    if(user.emailVerificationOTPExpiry < Date.now()) {
+    if (user.emailVerificationOTPExpiry < Date.now()) {
         throw new ApiError(409, "Otp Already Expired");
     }
 
     const isOtpValid = bcrypt.compare(otp, user.emailVerificationOTP);
 
-    if(!isOtpValid) {
+    if (!isOtpValid) {
         throw new ApiError(400, "Invalid Otp");
     }
 
-   user.isVerified = true
-   user.emailVerificationOTP = undefined;
-   user.emailVerificationOTPExpiry = undefined;
+    user.isVerified = true
+    user.emailVerificationOTP = undefined;
+    user.emailVerificationOTPExpiry = undefined;
 
-   await user.save({ validateBeforeSave: false });
+    await user.save({ validateBeforeSave: false });
 
-   return res.status(200)
-   .json(
-    new ApiResponse(200, {}, "Hurry! Your Email Is Now Verified")
-   )
+    return res.status(200)
+        .json(
+            new ApiResponse(200, {}, "Hurry! Your Email Is Now Verified")
+        )
 })
 
 const sendVerifyAccountOtp = asyncHandler(async (req, res) => {
@@ -335,17 +335,17 @@ const sendVerifyAccountOtp = asyncHandler(async (req, res) => {
 const sendForgetPasswordOtp = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
 
-    if(!userId) {
+    if (!userId) {
         throw new ApiError(400, "Unauthorized Access Denied");
     }
 
     const user = await User.findById(userId);
 
-    if(!user) {
+    if (!user) {
         throw new ApiError(404, "User Not Found");
     }
 
-    if(user.forgetPasswordOtpExpiredAt && user.forgetPasswordOtpExpiredAt > Date.now()) {
+    if (user.forgetPasswordOtpExpiredAt && user.forgetPasswordOtpExpiredAt > Date.now()) {
         throw new ApiError(429, "Please Wait Before requesting Another Otp");
     }
 
@@ -354,55 +354,55 @@ const sendForgetPasswordOtp = asyncHandler(async (req, res) => {
 
     user.forgetPasswordOtp = hashedOtp;
     user.forgetPasswordOtpExpiredAt = Date.now() + 2 * 60 * 1000;
-    await user.save({validateBeforeSave: false});
+    await user.save({ validateBeforeSave: false });
 
-   try {
-     await transporter.sendMail({
-         from: process.env.SENDER_EMAIL,
-         to: user.email,
-         subject: "Password Reset Otp",
-         html: `
+    try {
+        await transporter.sendMail({
+            from: process.env.SENDER_EMAIL,
+            to: user.email,
+            subject: "Password Reset Otp",
+            html: `
           <h2>Reset Your Password</h2>
           <p>Your OTP is:</p>
           <h1>${otp}</h1>
           <p>Valid for 2 minutes.</p>
       `
-     })
-   } catch (error) {
-    user.forgetPasswordOtp = undefined,
-    user.forgetPasswordOtpExpiredAt = undefined,
-    await user.save({validateBeforeSave: false});
-   }
-   return res.status(200)
-    .json(
-        new ApiResponse(200, {}, "Password Reset Otp Send Successfully")
-    )
+        })
+    } catch (error) {
+        user.forgetPasswordOtp = undefined,
+            user.forgetPasswordOtpExpiredAt = undefined,
+            await user.save({ validateBeforeSave: false });
+    }
+    return res.status(200)
+        .json(
+            new ApiResponse(200, {}, "Password Reset Otp Send Successfully")
+        )
 })
 
 const forgetPassword = asyncHandler(async (req, res) => {
-    const {password, otp} = req.body;
+    const { password, otp } = req.body;
 
-    if(!password || !otp) {
+    if (!password || !otp) {
         throw new ApiError(400, "Password And Otp Are Required");
     }
 
     const userId = req.user?._id;
-    if(!userId) {
+    if (!userId) {
         throw new ApiError(401, "Unauthorized Access Denied");
     }
 
     const user = await User.findById(userId);
-    if(!user) {
+    if (!user) {
         throw new ApiError(404, "User Not Found");
     }
 
-    if(user.forgetPasswordOtpExpiredAt < Date.now()) {
+    if (user.forgetPasswordOtpExpiredAt < Date.now()) {
         throw new ApiError(400, "Otp Expired");
     }
 
     const isOtpValid = await bcrypt.compare(otp, user.forgetPasswordOtp);
 
-    if(!isOtpValid) {
+    if (!isOtpValid) {
         throw new ApiError(400, "Invalid Otp");
     }
 
@@ -410,12 +410,12 @@ const forgetPassword = asyncHandler(async (req, res) => {
     user.forgetPasswordOtp = undefined;
     user.forgetPasswordOtpExpiredAt = undefined;
 
-    user.save({validateBeforeSave: false});
+    user.save({ validateBeforeSave: false });
 
     return res.status(200)
-    .json(
-        new ApiResponse(200, {}, "Password updated Successfully")
-    )
+        .json(
+            new ApiResponse(200, {}, "Password updated Successfully")
+        )
 })
 
 const updateCoverImage = asyncHandler(async (req, res) => {
@@ -424,10 +424,110 @@ const updateCoverImage = asyncHandler(async (req, res) => {
 
 const updateAvatar = asyncHandler(async (req, res) => {
 
-})   
+})
+
+const sendDeleteAccountOtp = asyncHandler(async (req, res) => {
+    const userId = req.user?._id;
+
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized Access Denied");
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    if (user.deleteAccountOtpExpiredAt && user.deleteAccountOtpExpiredAt > Date.now()) {
+        throw new ApiError(429, "Please wait before requesting another OTP")
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const hashedOtp = await bcrypt.hash(otp, 10);
+    user.deleteAccountOtp = hashedOtp;
+    user.deleteAccountOtpExpiredAt = Date.now() + 2 * 60 * 1000;
+    await user.save({ validateBeforeSave: false });
+
+    try {
+        await transporter.sendMail({
+            from: process.env.SENDER_EMAIL,
+            to: user.email,
+            subject: "Delete Account OTP",
+            html: `
+              <h2>Account Deletion Verification</h2>
+              <p>Use the OTP below to permanently delete your account.</p>
+              <h1>${otp}</h1>
+              <p>Valid for 2 minutes.</p>
+          `
+        })
+    } catch (error) {
+        user.deleteAccountOtp = undefined;
+        user.deleteAccountOtpExpiredAt = undefined,
+            await user.save({ validateBeforeSave: false })
+        throw new ApiError(500, "Failed To Send OTP");
+    }
+
+    return res.status(200)
+        .json(
+            new ApiResponse(200, {}, "OTP Send To Your Email Successfully")
+        )
+})
 
 const deleteAccount = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
 
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized Access Denied");
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    const { password, otp } = req.body
+
+    if (!password || !otp) {
+        throw new ApiError(400, "Password and OTP are required");
+    }
+
+    if (user.deleteAccountOtpExpiredAt < Date.now()) {
+        throw new ApiError(400, "Otp Expired")
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, user.deleteAccountOtp);
+
+    if (!isOtpValid) {
+        throw new ApiError(400, "Invalid Otp");
+    }
+
+    const isPasswordCorrect = await user.isPasswordCorrect(password)
+
+    if (!isPasswordCorrect) {
+        throw new ApiError(400, "Invalid Password");
+    }
+
+    user.deleteAccountOtp = undefined,
+        user.deleteAccountOtpExpiredAt = undefined,
+        await user.save({ validateBeforeSave: false });
+
+    await User.findByIdAndDelete(userId);
+
+    const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+    };
+
+    return res.status(200)
+        .clearCookie("accessToken", cookieOptions)
+        .clearCookie("refreshToken", cookieOptions)
+        .json(
+            new ApiResponse(200, {}, "Account Deleted Successfully")
+        )
 })
 
 const changeName = asyncHandler(async (req, res) => {
@@ -466,6 +566,10 @@ const changeName = asyncHandler(async (req, res) => {
     );
 });
 
+const fetchUser = asyncHandler(async (req, res) => {
+
+})
+
 export {
     registerUser,
     loginUser,
@@ -474,8 +578,10 @@ export {
     sendForgetPasswordOtp,
     forgetPassword,
     changeName,
+    deleteAccount,
+    logoutUser,
+    sendDeleteAccountOtp,
     updateAvatar,
     updateCoverImage,
-    deleteAccount,
-    logoutUser
+    fetchUser
 }

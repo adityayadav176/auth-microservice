@@ -380,11 +380,63 @@ const forgetPassword = asyncHandler(async (req, res) => {
     )
 })
 
+const updateCoverImage = asyncHandler(async (req, res) => {
+
+})
+
+const updateAvatar = asyncHandler(async (req, res) => {
+
+})
+
+const deleteAccount = asyncHandler(async (req, res) => {
+
+})
+
+const changeName = asyncHandler(async (req, res) => {
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+        throw new ApiError(400, "Name is required");
+    }
+
+    const userId = req.user?._id;
+
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized Access Denied");
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    user.name = name.trim();
+
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                _id: user._id,
+                name: user.name,
+                email: user.email
+            },
+            "Name updated successfully"
+        )
+    );
+});
+
 export {
     registerUser,
     loginUser,
     sendVerifyAccountOtp,
     verifyAccount,
     sendForgetPasswordOtp,
-    forgetPassword
+    forgetPassword,
+    changeName,
+    updateAvatar,
+    updateCoverImage,
+    deleteAccount
 }

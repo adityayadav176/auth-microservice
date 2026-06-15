@@ -13,6 +13,7 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({extended: true}));
 
+
 app.get("/", (req, res)=> {
     res.send("Auth MicroService Running");
 })
@@ -26,8 +27,12 @@ app.get("/smtp", (req, res) => {
 
 // import route
 import UserRouter from "./routes/user.routes.js"
+import { errorHandler } from "./middleware/error.middleware.js";
 
 // route declartion
 app.use("/api/v1/auth", UserRouter);
+
+
+app.use(errorHandler);
 
 export {app};

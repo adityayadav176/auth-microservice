@@ -197,6 +197,44 @@ const loginUser = asyncHandler(async (req, res) => {
         );
 })
 
+const logoutUser = asyncHandler(async (req, res) => {
+    const userId = req.user?._id;
+
+    if(!userId) {
+        throw new ApiError(401, "Unauthorized Access Denied");
+    }
+
+   const user = await User.findOneAndUpdate(
+    { _id: userId },
+    {
+        $unset: {
+            refreshToken: 1
+        }
+    },
+    {
+        returnDocument: "after"
+    }
+);
+
+    if(!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    const cookieOption = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+    };
+
+    return res
+        .status(200)
+        .clearCookie("accessToken", cookieOption)
+        .clearCookie("refreshToken", cookieOption)
+    .json(
+        new ApiResponse(200, {}, "User Logged Out Successfully")
+    )
+})
+
 const verifyAccount = asyncHandler(async (req, res) => {
     const {otp} = req.body;
 
@@ -386,7 +424,7 @@ const updateCoverImage = asyncHandler(async (req, res) => {
 
 const updateAvatar = asyncHandler(async (req, res) => {
 
-})
+})   
 
 const deleteAccount = asyncHandler(async (req, res) => {
 
@@ -438,5 +476,6 @@ export {
     changeName,
     updateAvatar,
     updateCoverImage,
-    deleteAccount
+    deleteAccount,
+    logoutUser
 }

@@ -294,9 +294,97 @@ const sendVerifyAccountOtp = asyncHandler(async (req, res) => {
         )
 })
 
+const sendForgetPasswordOtp = asyncHandler(async (req, res) => {
+    const userId = req.user?._id;
+
+    if(!userId) {
+        throw new ApiError(400, "Unauthorized Access Denied");
+    }
+
+    const user = await User.findById(userId);
+
+    if(!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    if(user.forgetPasswordOtpExpiredAt && user.forgetPasswordOtpExpiredAt > Date.now()) {
+        throw new ApiError(429, "Please Wait Before requesting Another Otp");
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedOtp = await bcrypt.hash(otp, 10);
+
+    user.forgetPasswordOtp = hashedOtp;
+    user.forgetPasswordOtpExpiredAt = Date.now() + 2 * 60 * 1000;
+    await user.save({validateBeforeSave: false});
+
+   try {
+     await transporter.sendMail({
+         from: process.env.SENDER_EMAIL,
+         to: user.email,
+         subject: "Password Reset Otp",
+         html: `
+          <h2>Reset Your Password</h2>
+          <p>Your OTP is:</p>
+          <h1>${otp}</h1>
+          <p>Valid for 2 minutes.</p>
+      `
+     })
+   } catch (error) {
+    user.forgetPasswordOtp = undefined,
+    user.forgetPasswordOtpExpiredAt = undefined,
+    await user.save({validateBeforeSave: false});
+   }
+   return res.status(200)
+    .json(
+        new ApiResponse(200, {}, "Password Reset Otp Send Successfully")
+    )
+})
+
+const forgetPassword = asyncHandler(async (req, res) => {
+    const {password, otp} = req.body;
+
+    if(!password || !otp) {
+        throw new ApiError(400, "Password And Otp Are Required");
+    }
+
+    const userId = req.user?._id;
+    if(!userId) {
+        throw new ApiError(401, "Unauthorized Access Denied");
+    }
+
+    const user = await User.findById(userId);
+    if(!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    if(user.forgetPasswordOtpExpiredAt < Date.now()) {
+        throw new ApiError(400, "Otp Expired");
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, user.forgetPasswordOtp);
+
+    if(!isOtpValid) {
+        throw new ApiError(400, "Invalid Otp");
+    }
+
+    user.password = password
+    user.forgetPasswordOtp = undefined;
+    user.forgetPasswordOtpExpiredAt = undefined;
+
+    user.save({validateBeforeSave: false});
+
+    return res.status(200)
+    .json(
+        new ApiResponse(200, {}, "Password updated Successfully")
+    )
+})
+
 export {
     registerUser,
     loginUser,
     sendVerifyAccountOtp,
-    verifyAccount
+    verifyAccount,
+    sendForgetPasswordOtp,
+    forgetPassword
 }

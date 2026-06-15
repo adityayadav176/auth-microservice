@@ -67,6 +67,13 @@ const UserSchema = new Schema({
     emailVerificationOTPExpiry: {
         type: Date
     },
+    forgetPasswordOtp: {
+        type: String,
+        default: ""
+    },
+    forgetPasswordOtpExpiredAt: {
+        type: Date
+    },
     lockUntil: {
         type: Date,
         default: null

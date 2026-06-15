@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { changeName, deleteAccount, forgetPassword, loginUser, logoutUser, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, verifyAccount } from "../controllers/user.controllers.js"
+import { changeName, deleteAccount, fetchUser, forgetPassword, loginUser, logoutUser, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, updateAvatar, updateCoverImage, verifyAccount } from "../controllers/user.controllers.js"
 import { upload } from "../middleware/multer.middleware.js"
 import { loginRateLimit } from "../rateLimiting/loginLimiter.js";
 import { verifyUser } from "../middleware/verifyUser.middleware.js";
@@ -30,5 +30,15 @@ router.post("/changeName",verifyUser, changeName);
 router.post("/logout",verifyUser, logoutUser);
 router.post("/sendDeleteAccountOtp",verifyUser, sendDeleteAccountOtp);
 router.post("/deleteAccount",verifyUser, deleteAccount);
-
+router.get("/fetchUser",verifyUser, fetchUser);
+router.patch("/update-avatar",
+    verifyUser,
+    upload.single("avatar"),
+    updateAvatar
+)
+router.patch("/update-coverImage",
+    verifyUser,
+    upload.single("coverImage"),
+    updateCoverImage
+)
 export default router

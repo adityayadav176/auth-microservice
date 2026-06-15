@@ -6,6 +6,7 @@ import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
 import bcrypt from "bcrypt"
+import cloudinary from "cloudinary"
 
 const generateAccessAndRefreshToken = async (userId) => {
     const user = await User.findById(userId);
@@ -419,12 +420,100 @@ const forgetPassword = asyncHandler(async (req, res) => {
 })
 
 const updateCoverImage = asyncHandler(async (req, res) => {
+   const coverImageLocalPath = req.file?.path;
 
+    if (!coverImageLocalPath) {
+        throw new ApiError(400, "Avatar File Required");
+    }
+
+    const userId = req.user?._id;
+
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized Access Denied");
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    // delete old avatar
+    if (user.coverImage?.public_id) {
+        await cloudinary.uploader.destroy(user.coverImage.public_id);
+    }
+
+    const uploadCoverImage = await uploadOnCloudinary(coverImageLocalPath);
+
+    if (!uploadCoverImage?.secure_url || !uploadCoverImage?.public_id) {
+        throw new ApiError(500, "Failed To Upload Avatar");
+    }
+
+    user.coverImage = {
+        url: uploadCoverImage.secure_url,
+        public_id: uploadCoverImage.public_id
+    };
+
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                coverImage: user.coverImage
+            },
+            "CoverImage Updated Successfully"
+        )
+    );
 })
 
 const updateAvatar = asyncHandler(async (req, res) => {
+    const avatarLocalPath = req.file?.path;
 
-})
+    if (!avatarLocalPath) {
+        throw new ApiError(400, "Avatar File Required");
+    }
+
+    const userId = req.user?._id;
+
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized Access Denied");
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    // delete old avatar
+    if (user.avatar?.public_id) {
+        await cloudinary.uploader.destroy(user.avatar.public_id);
+    }
+
+    const uploadAvatar = await uploadOnCloudinary(avatarLocalPath);
+
+    if (!uploadAvatar?.secure_url || !uploadAvatar?.public_id) {
+        throw new ApiError(500, "Failed To Upload Avatar");
+    }
+
+    user.avatar = {
+        url: uploadAvatar.secure_url,
+        public_id: uploadAvatar.public_id
+    };
+
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                avatar: user.avatar
+            },
+            "Avatar Updated Successfully"
+        )
+    );
+});
 
 const sendDeleteAccountOtp = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
@@ -567,7 +656,18 @@ const changeName = asyncHandler(async (req, res) => {
 });
 
 const fetchUser = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
 
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized Access Denied");
+    }
+
+    const user = await User.findById(userId).select("-password -refreshToken")
+
+    return res.status(200)
+        .json(
+            new ApiResponse(200, user, "Fethed User Successfully")
+        )
 })
 
 export {
@@ -583,5 +683,5 @@ export {
     sendDeleteAccountOtp,
     updateAvatar,
     updateCoverImage,
-    fetchUser
+    fetchUser,
 }

@@ -49,6 +49,7 @@ const UserSchema = new Schema({
         type: String,
         unique: true,
         sparse: true,
+        default: ""
     },
     role: {
         type: String,
@@ -76,6 +77,12 @@ const UserSchema = new Schema({
         default: ""
     },
     forgetPasswordOtpExpiredAt: {
+        type: Date
+    },
+    passwordResetToken: {
+        type: String
+    },
+    passwordResetTokenExpiresAt: {
         type: Date
     },
     deleteAccountOtp: {

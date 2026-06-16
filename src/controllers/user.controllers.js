@@ -7,7 +7,8 @@ import { ApiResponse } from "../utils/ApiResponse.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
 import bcrypt from "bcrypt"
 import cloudinary from "cloudinary"
-import {OAuth2Client} from "google-auth-library"
+import { OAuth2Client } from "google-auth-library"
+import crypto from "crypto";
 
 const generateAccessAndRefreshToken = async (userId) => {
     const user = await User.findById(userId);
@@ -32,7 +33,7 @@ const generateAccessAndRefreshToken = async (userId) => {
 };
 
 const client = new OAuth2Client(
-     process.env.GOOGLE_CLIENT_ID
+    process.env.GOOGLE_CLIENT_ID
 )
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -149,6 +150,13 @@ const loginUser = asyncHandler(async (req, res) => {
         throw new ApiError(404, "User Not Found");
     }
 
+    if (!user.password) {
+        throw new ApiError(
+            400,
+            "This account was created using Google. Please login with Google or set a password."
+        );
+    }
+
     const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (1000 * 60));
 
     if (user.lockUntil && user.lockUntil > Date.now()) {
@@ -188,6 +196,11 @@ const loginUser = asyncHandler(async (req, res) => {
         validateBeforeSave: false
     });
 
+    const loggedInUser = await User.findById(user._id)
+    .select(
+        "-password -refreshToken -forgetPasswordOtp -passwordResetToken -deleteAccountOtp -emailVerificationOTP"
+    );
+
     return res.status(200)
         .cookie("accessToken", accessToken, cookieOption)
         .cookie("refreshToken", refreshToken, cookieOption)
@@ -195,7 +208,7 @@ const loginUser = asyncHandler(async (req, res) => {
             new ApiResponse(
                 200,
                 {
-                    user,
+                    user: loggedInUser,
                     accessToken
                 },
                 "Login Successfully"
@@ -338,94 +351,167 @@ const sendVerifyAccountOtp = asyncHandler(async (req, res) => {
         )
 })
 
-const sendForgetPasswordOtp = asyncHandler(async (req, res) => {
-    const userId = req.user?._id;
-
-    if (!userId) {
-        throw new ApiError(400, "Unauthorized Access Denied");
-    }
-
-    const user = await User.findById(userId);
-
-    if (!user) {
-        throw new ApiError(404, "User Not Found");
-    }
-
-    if (user.forgetPasswordOtpExpiredAt && user.forgetPasswordOtpExpiredAt > Date.now()) {
-        throw new ApiError(429, "Please Wait Before requesting Another Otp");
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedOtp = await bcrypt.hash(otp, 10);
-
-    user.forgetPasswordOtp = hashedOtp;
-    user.forgetPasswordOtpExpiredAt = Date.now() + 2 * 60 * 1000;
-    await user.save({ validateBeforeSave: false });
-
-    try {
-        await transporter.sendMail({
-            from: process.env.SENDER_EMAIL,
-            to: user.email,
-            subject: "Password Reset Otp",
-            html: `
-          <h2>Reset Your Password</h2>
-          <p>Your OTP is:</p>
-          <h1>${otp}</h1>
-          <p>Valid for 2 minutes.</p>
-      `
-        })
-    } catch (error) {
-        user.forgetPasswordOtp = undefined,
-            user.forgetPasswordOtpExpiredAt = undefined,
-            await user.save({ validateBeforeSave: false });
-    }
-    return res.status(200)
-        .json(
-            new ApiResponse(200, {}, "Password Reset Otp Send Successfully")
-        )
-})
-
 const forgetPassword = asyncHandler(async (req, res) => {
-    const { password, otp } = req.body;
-
-    if (!password || !otp) {
-        throw new ApiError(400, "Password And Otp Are Required");
+    const { password, otp, resetToken } = req.body;
+    if (!password || !otp || !resetToken) {
+        throw new ApiError(
+            400,
+            "Reset Token, Password And OTP Are Required"
+        );
     }
 
-    const userId = req.user?._id;
-    if (!userId) {
-        throw new ApiError(401, "Unauthorized Access Denied");
-    }
+    const hashedToken = crypto
+        .createHash("sha256")
+        .update(resetToken)
+        .digest("hex");
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({
+        passwordResetToken: hashedToken,
+        passwordResetTokenExpiresAt: {
+            $gt: Date.now()
+        }
+    });
+
     if (!user) {
-        throw new ApiError(404, "User Not Found");
+        throw new ApiError(
+            400,
+            "Invalid Or Expired Reset Token"
+        );
+    }
+
+    if (!user.forgetPasswordOtp || !user.forgetPasswordOtpExpiredAt) {
+        throw new ApiError(
+            400,
+            "Request OTP First"
+        );
     }
 
     if (user.forgetPasswordOtpExpiredAt < Date.now()) {
-        throw new ApiError(400, "Otp Expired");
+        throw new ApiError(
+            400,
+            "OTP Expired"
+        );
     }
 
     const isOtpValid = await bcrypt.compare(otp, user.forgetPasswordOtp);
 
     if (!isOtpValid) {
-        throw new ApiError(400, "Invalid Otp");
+        throw new ApiError(
+            400,
+            "Invalid OTP"
+        );
     }
 
-    user.password = password
+    user.password = password;
+
     user.forgetPasswordOtp = undefined;
     user.forgetPasswordOtpExpiredAt = undefined;
 
-    user.save({ validateBeforeSave: false });
+    user.passwordResetToken = undefined;
+    user.passwordResetTokenExpiresAt =
+        undefined;
 
-    return res.status(200)
-        .json(
-            new ApiResponse(200, {}, "Password updated Successfully")
+    await user.save({
+        validateBeforeSave: false
+    });
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {},
+            "Password Updated Successfully"
         )
-})
+    );
+});
+
+const sendForgetPasswordOtp = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        throw new ApiError(400, "Email Required");
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+        throw new ApiError(404, "Account Not Found");
+    }
+
+    if (
+        user.forgetPasswordOtpExpiredAt &&
+        user.forgetPasswordOtpExpiredAt > Date.now()
+    ) {
+        throw new ApiError(
+            429,
+            "Please Wait Before Requesting Another OTP"
+        );
+    }
+
+    const otp = Math.floor(
+        100000 + Math.random() * 900000
+    ).toString();
+
+    const hashedOtp = await bcrypt.hash(otp, 10);
+
+    const resetToken = crypto
+        .randomBytes(32)
+        .toString("hex");
+
+    user.passwordResetToken = crypto
+        .createHash("sha256")
+        .update(resetToken)
+        .digest("hex");
+
+    user.passwordResetTokenExpiresAt =
+        Date.now() + 10 * 60 * 1000;
+
+    user.forgetPasswordOtp = hashedOtp;
+    user.forgetPasswordOtpExpiredAt =
+        Date.now() + 2 * 60 * 1000;
+
+    await user.save({
+        validateBeforeSave: false
+    });
+
+    try {
+        await transporter.sendMail({
+            from: process.env.SENDER_EMAIL,
+            to: email,
+            subject: "Password Reset OTP",
+            html: `
+            <h2>Reset Your Password</h2>
+            <p>Your OTP is:</p>
+            <h1>${otp}</h1>
+            <p>Valid for 2 minutes.</p>
+        `
+        });
+    } catch (error) {
+        user.forgetPasswordOtp = undefined;
+        user.forgetPasswordOtpExpiredAt = undefined;
+        user.passwordResetToken = undefined;
+        user.passwordResetTokenExpiresAt = undefined;
+
+        await user.save({
+            validateBeforeSave: false
+        });
+
+        throw new ApiError(
+            500,
+            "Failed To Send OTP"
+        );
+    }
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            { resetToken },
+            "Password Reset OTP Sent Successfully"
+        )
+    );
+});
 
 const updateCoverImage = asyncHandler(async (req, res) => {
-   const coverImageLocalPath = req.file?.path;
+    const coverImageLocalPath = req.file?.path;
 
     if (!coverImageLocalPath) {
         throw new ApiError(400, "Avatar File Required");
@@ -676,15 +762,15 @@ const fetchUser = asyncHandler(async (req, res) => {
 })
 
 const googleAuth = asyncHandler(async (req, res) => {
-     const { credential } = req.body;
+    const { credential } = req.body;
 
-       if (!credential) {
+    if (!credential) {
         throw new ApiError(
             400,
             "Google credential is required"
         );
     }
-    
+
     const ticket = await client.verifyIdToken({
         idToken: credential,
         audience: process.env.GOOGLE_CLIENT_ID
@@ -692,20 +778,20 @@ const googleAuth = asyncHandler(async (req, res) => {
 
     const payload = ticket.getPayload();
 
-    if(!payload?.email) {
+    if (!payload?.email) {
         throw new ApiError(400, "Invalid Google Token");
     }
 
-    const {sub: googleId, email, name, picture} = payload;
+    const { sub: googleId, email, name, picture } = payload;
 
-      let user = await User.findOne({
+    let user = await User.findOne({
         $or: [
             { googleId },
             { email }
         ]
     });
 
-      if (!user) {
+    if (!user) {
         user = await User.create({
             googleId,
             name,
@@ -718,7 +804,7 @@ const googleAuth = asyncHandler(async (req, res) => {
         });
     }
 
-      else if (!user.googleId) {
+    else if (!user.googleId) {
         user.googleId = googleId;
 
         if (!user.avatar?.url && picture) {
@@ -733,11 +819,11 @@ const googleAuth = asyncHandler(async (req, res) => {
         await user.save();
     }
 
-    const {accessToken, refreshToken} = await generateAccessAndRefreshToken(user._id);
+    const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
 
     user.refreshToken = refreshToken;
 
-    await user.save({validateBeforeSave: false});
+    await user.save({ validateBeforeSave: false });
 
     const option = {
         httpOnly: true,
@@ -746,13 +832,13 @@ const googleAuth = asyncHandler(async (req, res) => {
     };
 
     return res.status(200)
-    .cookie("accessToken", accessToken, option)
-    .cookie("refreshToken", refreshToken, option)
-    .json(
-        new ApiResponse(
-            200,
-            {
-                 user: {
+        .cookie("accessToken", accessToken, option)
+        .cookie("refreshToken", refreshToken, option)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    user: {
                         _id: user._id,
                         name: user.name,
                         email: user.email,
@@ -760,10 +846,10 @@ const googleAuth = asyncHandler(async (req, res) => {
                         role: user.role
                     },
                     accessToken
-            },
-            "Google Login Successful"
+                },
+                "Google Login Successful"
+            )
         )
-    )
 })
 
 export {

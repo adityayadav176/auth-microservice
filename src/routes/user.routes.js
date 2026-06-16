@@ -24,8 +24,8 @@ router.post(
 router.post("/login", loginRateLimit, loginUser);
 router.post("/sendEmailVerificationOtp",verifyUser, sendVerifyAccountOtp);
 router.post("/VerifyEmail",verifyUser, verifyAccount);
-router.post("/SendPasswordResetOtp",verifyUser, sendForgetPasswordOtp);
-router.post("/forgetPassword",verifyUser, forgetPassword);
+router.post("/SendPasswordResetOtp", sendForgetPasswordOtp);
+router.post("/forgetPassword", forgetPassword);
 router.post("/changeName",verifyUser, changeName);
 router.post("/logout",verifyUser, logoutUser);
 router.post("/sendDeleteAccountOtp",verifyUser, sendDeleteAccountOtp);

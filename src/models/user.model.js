@@ -108,6 +108,13 @@ const UserSchema = new Schema({
     },
     refreshToken: {
         type: String
+    },
+    twoFactorEnabled: {
+        type: Boolean,
+        default: false
+    },
+    twoFactorSecret: {
+        type: String
     }
 }, { timestamps: true })
 

@@ -10,6 +10,8 @@ import cloudinary from "cloudinary"
 import { OAuth2Client } from "google-auth-library"
 import crypto from "crypto";
 import axios from "axios";
+import speakeasy from "speakeasy";
+import QRCode from "qrcode";
 
 const generateAccessAndRefreshToken = async (userId) => {
     const user = await User.findById(userId);
@@ -160,9 +162,9 @@ const loginUser = asyncHandler(async (req, res) => {
 
     const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (1000 * 60));
 
-    if (user.lockUntil && user.lockUntil > Date.now()) {
-        throw new ApiError(403, `Account locked. Try again in ${remainingMinutes} minute(s).`)
-    }
+    // if (user.lockUntil && user.lockUntil > Date.now()) {
+    //     throw new ApiError(403, `Account locked. Try again in ${remainingMinutes} minute(s).`)
+    // }
 
     const isPasswordCorrect = await user.isPasswordCorrect(password);
 
@@ -179,6 +181,16 @@ const loginUser = asyncHandler(async (req, res) => {
         });
 
         throw new ApiError(400, "Invalid Credintials");
+    }
+
+    if (user.twoFactorEnabled) {
+        return res.status(200)
+            .json(
+                new ApiResponse({
+                    twoFactorRequired: true,
+                    userId: user._id
+                })
+            )
     }
 
     const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
@@ -210,7 +222,7 @@ const loginUser = asyncHandler(async (req, res) => {
                 200,
                 {
                     user: loggedInUser,
-                    accessToken
+                    accessToken,
                 },
                 "Login Successfully"
             )
@@ -943,24 +955,144 @@ const githubCallback = asyncHandler(async (req, res) => {
     };
 
     return res.status(200)
-    .cookie("accessToken", accessToken, option)
-    .cookie("refreshToken", refreshToken, option)
-    .json(
+        .cookie("accessToken", accessToken, option)
+        .cookie("refreshToken", refreshToken, option)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    data: {
+                        accessToken,
+                        user: {
+                            id: user._id,
+                            name: user.name,
+                            email: user.email
+                        }
+                    }
+                },
+                "GitHub OAuth successfull"
+            )
+        )
+});
+
+const enable2FA = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    // prevent accidental overwrite
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+        return res.status(400).json(
+            new ApiResponse(
+                400,
+                {},
+                "2FA already enabled"
+            )
+        );
+    }
+
+    // generate secret
+    const secret = speakeasy.generateSecret({
+        name: user.email,
+        issuer: "MyApp"
+    });
+
+    // store ONLY base32 secret
+    user.twoFactorSecret = secret.base32;
+    user.twoFactorEnabled = false;
+    await user.save();
+
+    // build proper otpauth URL
+    const otpauthURL = speakeasy.otpauthURL({
+        secret: secret.base32,
+        label: user.email,
+        issuer: "MyApp",
+        encoding: "base32"
+    });
+
+    const qrCodeUrl = await QRCode.toDataURL(otpauthURL);
+
+    return res.status(201).json(
+        new ApiResponse(
+            201,
+            {
+                qrCodeUrl,
+                secret: secret.base32
+            },
+            "Scan QR code in Authenticator App"
+        )
+    );
+});
+
+const verify2FASetup = asyncHandler(async (req, res) => {
+    const { token } = req.body;
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    if (!user.twoFactorSecret) {
+        return res.status(400).json(
+            new ApiResponse(400, {}, "2FA not initialized")
+        );
+    }
+
+    const verified = speakeasy.totp.verify({
+        secret: user.twoFactorSecret,
+        encoding: "base32",
+        token: token.toString().trim(),
+        window: 1
+    });
+
+    if (!verified) {
+        throw new ApiError(400, "Invalid OTP");
+    }
+
+    user.twoFactorEnabled = true;
+    await user.save();
+
+    return res.status(200).json(
+        new ApiResponse(200, "2FA enabled successfully")
+    );
+});
+
+const verify2FALogin = asyncHandler(async (req, res) => {
+    const { userId, token } = req.body;
+
+    const user = await User.findById(userId);
+
+    if (!user || !user.twoFactorSecret) {
+        throw new ApiError(400, "Invalid request");
+    }
+
+    const verified = speakeasy.totp.verify({
+        secret: user.twoFactorSecret,
+        encoding: "base32",
+        token: token.toString().trim(),
+        window: 1
+    });
+
+    if (!verified) {
+        throw new ApiError(400, "Invalid OTP");
+    }
+
+    const { accessToken, refreshToken } =
+        await generateAccessAndRefreshToken(user._id);
+
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    return res.status(200).json(
         new ApiResponse(
             200,
-            {
-                data: {
-                    accessToken,
-                    user: {
-                        id: user._id,
-                        name: user.name,
-                        email: user.email
-                    }
-                }
-            },
-            "GitHub OAuth successfull"
+            { accessToken, refreshToken },
+            "2FA Verified"
         )
-    )
+    );
 });
 
 export {
@@ -978,5 +1110,8 @@ export {
     updateCoverImage,
     fetchUser,
     googleAuth,
-    githubCallback
+    githubCallback,
+    enable2FA,
+    verify2FALogin,
+    verify2FASetup
 }

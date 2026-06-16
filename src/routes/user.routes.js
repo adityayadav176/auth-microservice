@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { changeName, deleteAccount, fetchUser, forgetPassword, githubCallback, googleAuth, loginUser, logoutUser, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, updateAvatar, updateCoverImage, verifyAccount } from "../controllers/user.controllers.js"
+import { changeName, deleteAccount, enable2FA, fetchUser, forgetPassword, githubCallback, googleAuth, loginUser, logoutUser, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, updateAvatar, updateCoverImage, verify2FALogin, verify2FASetup, verifyAccount } from "../controllers/user.controllers.js"
 import { upload } from "../middleware/multer.middleware.js"
 import { loginRateLimit } from "../rateLimiting/loginLimiter.js";
 import { verifyUser } from "../middleware/verifyUser.middleware.js";
@@ -21,7 +21,7 @@ router.post(
     registerUser
 );
 
-router.post("/login", loginRateLimit, loginUser);
+router.post("/login", loginUser);
 router.post("/sendEmailVerificationOtp",verifyUser, sendVerifyAccountOtp);
 router.post("/VerifyEmail",verifyUser, verifyAccount);
 router.post("/SendPasswordResetOtp", sendForgetPasswordOtp);
@@ -56,4 +56,7 @@ router.get("/github", (req, res) => {
 });
 
 router.get("/github/callback", githubCallback);
+router.post("/2fa/enable", verifyUser, enable2FA);
+router.post("/2fa/verify-setup", verifyUser, verify2FASetup);
+router.post("/login/2fa", verify2FALogin);
 export default router

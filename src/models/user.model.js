@@ -115,6 +115,10 @@ const UserSchema = new Schema({
     },
     twoFactorSecret: {
         type: String
+    },
+    tokenVersion: {
+        type: Number,
+        default: 0
     }
 }, { timestamps: true })
 
@@ -129,10 +133,12 @@ UserSchema.methods.isPasswordCorrect = async function (password) {
     return await bcrypt.compare(password, this.password);
 };
 
-UserSchema.methods.generateAccessToken = function () {
+UserSchema.methods.generateAccessToken = function (sessionId) {
     return jwt.sign(
         {
             _id: this._id,
+            sessionId: sessionId,
+            tokenVersion: this.tokenVersion
         },
         process.env.ACCESS_TOKEN_SECRET,
         {
@@ -141,10 +147,12 @@ UserSchema.methods.generateAccessToken = function () {
     );
 };
 
-UserSchema.methods.generateRefreshToken = function () {
+UserSchema.methods.generateRefreshToken = function (sessionId) {
     return jwt.sign(
         {
-            _id: this._id
+            _id: this._id,
+            sessionId: sessionId,
+            tokenVersion: user.tokenVersion
         },
         process.env.REFRESH_TOKEN_SECRET,
         {

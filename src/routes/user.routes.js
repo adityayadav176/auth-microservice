@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { changeName, deleteAccount, enable2FA, fetchUser, forgetPassword, githubCallback, googleAuth, loginUser, logoutCurrentUser, refreshAccessToken, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, updateAvatar, updateCoverImage, verify2FALogin, verify2FASetup, verifyAccount } from "../controllers/user.controllers.js"
+import { changeName, deleteAccount, enable2FA, fetchUser, forgetPassword, googleAuth, loginUser, logoutCurrentUser, refreshAccessToken, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, updateAvatar, updateCoverImage, verify2FALogin, verify2FASetup, verifyAccount } from "../controllers/user.controllers.js"
 import { upload } from "../middleware/multer.middleware.js"
 import { loginRateLimit } from "../rateLimiting/loginLimiter.js";
 import { verifyUser } from "../middleware/verifyUser.middleware.js";

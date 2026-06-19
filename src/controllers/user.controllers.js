@@ -1276,7 +1276,6 @@ export {
     updateCoverImage,
     fetchUser,
     googleAuth,
-    githubCallback,
     enable2FA,
     verify2FALogin,
     verify2FASetup,
